@@ -1,4 +1,3 @@
-
 import time
 import numpy as np
 import streamlit as st
@@ -449,7 +448,7 @@ with st.sidebar:
     )
 
     fe = st.slider(
-        "Fréquence d'affichage fe (Hz)",
+        "Rythme de mise à jour fe (rafraîchissements/s)",
         min_value=2,
         max_value=30,
         value=10,
@@ -642,7 +641,7 @@ st.markdown(
 graph_col1, graph_col2 = st.columns(2)
 
 # -----------------------
-# Signal bruité
+# Signal bruité en entrée
 # -----------------------
 with graph_col1:
     fig1, ax1 = plt.subplots(figsize=(7, 4))
@@ -652,7 +651,7 @@ with graph_col1:
         st.session_state.temps,
         st.session_state.signal_bruite,
         type_signal,
-        "Signal temporel bruité"
+        "Signal temporel bruité en entrée"
     )
 
     appliquer_theme_graphe(ax1, theme)
@@ -661,7 +660,7 @@ with graph_col1:
     plt.close(fig1)
 
 # -----------------------
-# Signal filtré
+# Signal de sortie après filtrage
 # -----------------------
 with graph_col2:
     fig2, ax2 = plt.subplots(figsize=(7, 4))
@@ -681,7 +680,7 @@ with graph_col2:
                 linewidth=2.2
             )
 
-    ax2.set_title("Sortie après filtrage passe-bas", fontsize=14, fontweight="bold")
+    ax2.set_title("Signal de sortie après filtrage passe-bas", fontsize=14, fontweight="bold")
     ax2.set_xlabel("Temps (s)")
     ax2.set_ylabel("Amplitude")
     ax2.set_ylim(-3, 3)
@@ -785,7 +784,7 @@ with info_col2:
         f"""
         <div class="info-box">
         <b>Mesures temps réel</b><br><br>
-        Fréquence d'affichage fe : {fe} Hz<br>
+        Rythme de mise à jour fe : {fe} rafraîchissements/s<br>
         Période théorique Te : {Te:.3f} s<br>
         Nombre d'échantillons : {st.session_state.nb_echantillons}<br>
         Nombre de dépassements : {st.session_state.nb_depassements}<br>
