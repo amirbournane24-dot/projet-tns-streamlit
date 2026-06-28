@@ -454,7 +454,7 @@ with st.sidebar:
     max_value=400,
     value=200,
     step=50
-)
+
     )
 
     delta_t = st.slider(
