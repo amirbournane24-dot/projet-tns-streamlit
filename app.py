@@ -680,7 +680,7 @@ with graph_col2:
         ax2.plot(freq, module_log, linewidth=2.2)
 
 
-    ax2.set_title("Analyse fréquentielle du signal d'entrée par FFT centrée", fontsize=14, fontweight="bold")
+    ax2.set_title("Analyse fréquentielle du signal de sortie par FFT centrée", fontsize=14, fontweight="bold")
     ax2.set_xlabel("Fréquence (Hz)")
     ax2.set_ylabel("Module logarithmique")
     ax2.set_xlim(-points_par_seconde / 2, points_par_seconde / 2)
