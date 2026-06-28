@@ -449,11 +449,12 @@ with st.sidebar:
     )
 
     points_par_seconde = st.slider(
-        "Points calculés par seconde",
-        min_value=10,
-        max_value=200,
-        value=50,
-        step=10
+    "Points calculés par seconde",
+    min_value=50,
+    max_value=400,
+    value=200,
+    step=50
+)
     )
 
     delta_t = st.slider(
