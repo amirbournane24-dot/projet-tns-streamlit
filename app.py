@@ -282,7 +282,7 @@ def filtrer_signal(x, rho):
     return y
 
 
-def calculer_fft(signal, fe):
+def calculer_fft(signal, points_par_seconde):
     if len(signal) < 8:
         return np.array([]), np.array([])
 
@@ -294,7 +294,7 @@ def calculer_fft(signal, fe):
     X = np.fft.fft(x)
     X = np.fft.fftshift(X)
 
-    freq = np.fft.fftfreq(N, d=1 / fe)
+    freq = np.fft.fftfreq(N, d=1 / points_par_seconde)
     freq = np.fft.fftshift(freq)
 
     module = np.abs(X) / N
@@ -309,14 +309,14 @@ def ajouter_echantillon(
     amplitude,
     sigma_bruit,
     rho,
-    fe,
+    points_par_seconde,
     delta_t,
     bruit_active,
     filtrage_active
 ):
     debut = time.time()
 
-    Te = 1 / fe
+    periode_echantillonnage = 1 / points_par_seconde
     t = st.session_state.t
 
     x = calculer_signal(t, type_signal, frequence, amplitude)
@@ -331,7 +331,7 @@ def ajouter_echantillon(
     else:
         y = x_bruite
 
-    nb_points_max = int(delta_t * fe)
+    nb_points_max = int(delta_t * points_par_seconde)
 
     st.session_state.temps.append(t)
     st.session_state.signal_bruite.append(x_bruite)
@@ -341,7 +341,7 @@ def ajouter_echantillon(
     st.session_state.signal_bruite = st.session_state.signal_bruite[-nb_points_max:]
     st.session_state.signal_filtre = st.session_state.signal_filtre[-nb_points_max:]
 
-    st.session_state.t += Te
+    st.session_state.t += periode_echantillonnage
     st.session_state.nb_echantillons += 1
 
     temps_calcul = time.time() - debut
@@ -352,7 +352,7 @@ def ajouter_echantillon(
     st.session_state.indices = st.session_state.indices[-200:]
     st.session_state.temps_calculs = st.session_state.temps_calculs[-200:]
 
-    if temps_calcul > Te:
+    if temps_calcul > periode_echantillonnage:
         st.session_state.nb_depassements += 1
 
     return temps_calcul
@@ -385,6 +385,12 @@ def appliquer_theme_graphe(ax, theme):
 
 
 def tracer_signal(ax, temps, valeurs, type_signal, titre):
+    ax.set_title(titre, fontsize=14, fontweight="bold")
+    ax.set_xlabel("Temps (s)")
+    ax.set_ylabel("Amplitude")
+    ax.set_ylim(-3, 3)
+    ax.set_xlim(0, 1)
+
     if len(temps) == 0:
         return
 
@@ -392,11 +398,6 @@ def tracer_signal(ax, temps, valeurs, type_signal, titre):
         ax.step(temps, valeurs, where="post", linewidth=2.2)
     else:
         ax.plot(temps, valeurs, linewidth=2.2)
-
-    ax.set_title(titre, fontsize=14, fontweight="bold")
-    ax.set_xlabel("Temps (s)")
-    ax.set_ylabel("Amplitude")
-    ax.set_ylim(-3, 3)
 
     if len(temps) > 1:
         ax.set_xlim(temps[0], temps[-1])
@@ -447,12 +448,12 @@ with st.sidebar:
         step=0.01
     )
 
-    fe = st.slider(
-        "Rythme de mise à jour fe (rafraîchissements/s)",
-        min_value=2,
-        max_value=30,
-        value=10,
-        step=1
+    points_par_seconde = st.slider(
+        "Points calculés par seconde",
+        min_value=10,
+        max_value=200,
+        value=50,
+        step=10
     )
 
     delta_t = st.slider(
@@ -555,26 +556,33 @@ st.markdown(
 # SIMULATION
 # ==========================================================
 
-Te = 1 / fe
+intervalle_rafraichissement = 0.5
+periode_echantillonnage = 1 / points_par_seconde
+points_par_rafraichissement = max(1, int(points_par_seconde * intervalle_rafraichissement))
 
 if st.session_state.running:
-    temps_calcul = ajouter_echantillon(
-        type_signal,
-        frequence,
-        amplitude,
-        sigma_bruit,
-        rho,
-        fe,
-        delta_t,
-        bruit_active,
-        filtrage_active
-    )
+    temps_total_calcul = 0.0
 
-    if temps_calcul > Te:
+    for _ in range(points_par_rafraichissement):
+        temps_total_calcul += ajouter_echantillon(
+            type_signal,
+            frequence,
+            amplitude,
+            sigma_bruit,
+            rho,
+            points_par_seconde,
+            delta_t,
+            bruit_active,
+            filtrage_active
+        )
+
+    if temps_total_calcul > intervalle_rafraichissement:
         etat_temps_reel = "DÉPASSEMENT"
+        st.session_state.nb_depassements += 1
     else:
         etat_temps_reel = "OK"
 else:
+    temps_total_calcul = 0.0
     etat_temps_reel = "PAUSE"
 
 
@@ -599,7 +607,7 @@ with c2:
     st.markdown(
         f"""
         <div class="card">
-            <div class="metric-title">Fréquence</div>
+            <div class="metric-title">Fréquence signal</div>
             <div class="metric-value">{frequence:.1f} Hz</div>
         </div>
         """,
@@ -638,10 +646,11 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Ligne 1 : signal d'entrée + FFT
 graph_col1, graph_col2 = st.columns(2)
 
 # -----------------------
-# Signal bruité en entrée
+# Haut gauche : Signal temporel bruité en entrée
 # -----------------------
 with graph_col1:
     fig1, ax1 = plt.subplots(figsize=(7, 4))
@@ -659,34 +668,22 @@ with graph_col1:
     st.pyplot(fig1)
     plt.close(fig1)
 
+
 # -----------------------
-# Signal de sortie après filtrage
+# Haut droite : Analyse FFT
 # -----------------------
 with graph_col2:
     fig2, ax2 = plt.subplots(figsize=(7, 4))
 
-    if len(st.session_state.temps) > 0:
-        if type_signal == "Carré" and not filtrage_active:
-            ax2.step(
-                st.session_state.temps,
-                st.session_state.signal_filtre,
-                where="post",
-                linewidth=2.2
-            )
-        else:
-            ax2.plot(
-                st.session_state.temps,
-                st.session_state.signal_filtre,
-                linewidth=2.2
-            )
+    if fft_active and len(st.session_state.signal_bruite) >= 8:
+        freq, module_log = calculer_fft(st.session_state.signal_bruite, points_par_seconde)
+        ax2.plot(freq, module_log, linewidth=2.2)
 
-    ax2.set_title("Signal de sortie après filtrage passe-bas", fontsize=14, fontweight="bold")
-    ax2.set_xlabel("Temps (s)")
-    ax2.set_ylabel("Amplitude")
-    ax2.set_ylim(-3, 3)
-
-    if len(st.session_state.temps) > 1:
-        ax2.set_xlim(st.session_state.temps[0], st.session_state.temps[-1])
+    ax2.set_title("Analyse fréquentielle par FFT centrée", fontsize=14, fontweight="bold")
+    ax2.set_xlabel("Fréquence (Hz)")
+    ax2.set_ylabel("Module logarithmique")
+    ax2.set_xlim(-points_par_seconde / 2, points_par_seconde / 2)
+    ax2.set_ylim(-80, 10)
 
     appliquer_theme_graphe(ax2, theme)
 
@@ -694,35 +691,47 @@ with graph_col2:
     plt.close(fig2)
 
 
-# ==========================================================
-# FFT ET SURVEILLANCE
-# ==========================================================
-
+# Ligne 2 : signal de sortie + surveillance temps réel
 graph_col3, graph_col4 = st.columns(2)
 
 # -----------------------
-# FFT
+# Bas gauche : Signal de sortie
 # -----------------------
 with graph_col3:
     fig3, ax3 = plt.subplots(figsize=(7, 4))
 
-    if fft_active and len(st.session_state.signal_bruite) >= 8:
-        freq, module_log = calculer_fft(st.session_state.signal_bruite, fe)
-        ax3.plot(freq, module_log, linewidth=2.2)
+    ax3.set_title("Signal de sortie après filtrage passe-bas", fontsize=14, fontweight="bold")
+    ax3.set_xlabel("Temps (s)")
+    ax3.set_ylabel("Amplitude")
+    ax3.set_ylim(-3, 3)
+    ax3.set_xlim(0, 1)
 
-    ax3.set_title("Analyse fréquentielle par FFT centrée", fontsize=14, fontweight="bold")
-    ax3.set_xlabel("Fréquence (Hz)")
-    ax3.set_ylabel("Module logarithmique")
-    ax3.set_xlim(-fe / 2, fe / 2)
-    ax3.set_ylim(-80, 10)
+    if len(st.session_state.temps) > 0:
+        if type_signal == "Carré" and not filtrage_active:
+            ax3.step(
+                st.session_state.temps,
+                st.session_state.signal_filtre,
+                where="post",
+                linewidth=2.2
+            )
+        else:
+            ax3.plot(
+                st.session_state.temps,
+                st.session_state.signal_filtre,
+                linewidth=2.2
+            )
+
+        if len(st.session_state.temps) > 1:
+            ax3.set_xlim(st.session_state.temps[0], st.session_state.temps[-1])
 
     appliquer_theme_graphe(ax3, theme)
 
     st.pyplot(fig3)
     plt.close(fig3)
 
+
 # -----------------------
-# Surveillance temps réel
+# Bas droite : Surveillance temps réel
 # -----------------------
 with graph_col4:
     fig4, ax4 = plt.subplots(figsize=(7, 4))
@@ -734,17 +743,17 @@ with graph_col4:
             linewidth=2.2
         )
         ax4.axhline(
-            Te,
+            periode_echantillonnage,
             linestyle="--",
             linewidth=2,
-            label="Limite temps réel"
+            label="Limite par point calculé"
         )
         ax4.legend()
 
     ax4.set_title("Surveillance du temps réel", fontsize=14, fontweight="bold")
     ax4.set_xlabel("Numéro de boucle")
     ax4.set_ylabel("Temps de calcul (s)")
-    ax4.set_ylim(0, Te * 2)
+    ax4.set_ylim(0, periode_echantillonnage * 2)
 
     appliquer_theme_graphe(ax4, theme)
 
@@ -784,8 +793,10 @@ with info_col2:
         f"""
         <div class="info-box">
         <b>Mesures temps réel</b><br><br>
-        Rythme de mise à jour fe : {fe} rafraîchissements/s<br>
-        Période théorique Te : {Te:.3f} s<br>
+        Points calculés par seconde : {points_par_seconde}<br>
+        Points calculés entre deux rafraîchissements : {points_par_rafraichissement}<br>
+        Intervalle de rafraîchissement : {intervalle_rafraichissement:.1f} s<br>
+        Période entre deux points : {periode_echantillonnage:.3f} s<br>
         Nombre d'échantillons : {st.session_state.nb_echantillons}<br>
         Nombre de dépassements : {st.session_state.nb_depassements}<br>
         État : {etat_temps_reel}
@@ -811,7 +822,7 @@ if type_signal == "Carré":
 # ==========================================================
 
 if st.session_state.running:
-    time.sleep(Te)
+    time.sleep(intervalle_rafraichissement)
     st.rerun()
 
 
